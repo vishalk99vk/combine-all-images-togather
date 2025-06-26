@@ -1,71 +1,51 @@
 import streamlit as st
 import os
 import shutil
-import subprocess
+from zipfile import ZipFile
+from io import BytesIO
 
-st.title("Image Folder Mover")
+st.title("Upload Images and Download Processed Zip")
 
-def open_folder_in_explorer(path):
-    if os.path.exists(path):
-        if os.name == 'nt':  # Windows
-            subprocess.Popen(f'explorer "{path}"')
-        else:
-            st.warning("Auto-opening folders supported only on Windows")
-    else:
-        st.warning("Path does not exist")
-
-source_folder = st.text_input(
-    "Source folder path",
-    value=r"C:\Users\pdvis\OneDrive\Desktop\SKU Packshots - 06-11-2024"
+uploaded_files = st.file_uploader(
+    "Upload multiple images",
+    type=["png", "jpg", "jpeg", "gif", "bmp"],
+    accept_multiple_files=True
 )
-if st.button("Open Source Folder"):
-    open_folder_in_explorer(source_folder)
 
-destination_folder = st.text_input(
-    "Destination folder path",
-    value=r"C:\Users\pdvis\OneDrive\Desktop\Italy"
-)
-if st.button("Open Destination Folder"):
-    open_folder_in_explorer(destination_folder)
+if uploaded_files:
+    st.write(f"Uploaded {len(uploaded_files)} files.")
 
-def move_images(src, dest):
-    if not os.path.exists(dest):
-        os.makedirs(dest)
-    
-    all_files = []
-    for root, dirs, files in os.walk(src):
-        for file_name in files:
-            all_files.append(os.path.join(root, file_name))
-    
-    total_files = len(all_files)
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # Create a temp directory to store uploads
+    temp_dir = "temp_uploads"
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
-    for i, file_path in enumerate(all_files):
-        if os.path.isfile(file_path):
-            file_name = os.path.basename(file_path)
-            destination_file_path = os.path.join(dest, file_name)
+    # Save uploaded files to temp_dir
+    for uploaded_file in uploaded_files:
+        file_path = os.path.join(temp_dir, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
 
-            if os.path.exists(destination_file_path):
-                base_name, extension = os.path.splitext(file_name)
-                counter = 1
-                new_file_name = f"{base_name}_{counter}{extension}"
-                new_file_path = os.path.join(dest, new_file_name)
-                while os.path.exists(new_file_path):
-                    counter += 1
-                    new_file_name = f"{base_name}_{counter}{extension}"
-                    new_file_path = os.path.join(dest, new_file_name)
-                shutil.move(file_path, new_file_path)
-            else:
-                shutil.move(file_path, destination_file_path)
+    if st.button("Process and Prepare Download"):
+        # Here you can do your "processing" if needed
+        # For demo, we just zip all uploaded files
 
-        progress_bar.progress((i + 1) / total_files)
-        status_text.text(f"Moved {i + 1} of {total_files} files")
+        zip_buffer = BytesIO()
+        with ZipFile(zip_buffer, "w") as zip_file:
+            for file_name in os.listdir(temp_dir):
+                file_path = os.path.join(temp_dir, file_name)
+                zip_file.write(file_path, arcname=file_name)
 
-    st.success("All images have been moved!")
+        zip_buffer.seek(0)
 
-if st.button("Move Images"):
-    if not os.path.exists(source_folder):
-        st.error("Source folder does not exist!")
-    else:
-        move_images(source_folder, destination_folder)
+        st.success("Ready to download!")
+
+        st.download_button(
+            label="Download ZIP of uploaded images",
+            data=zip_buffer,
+            file_name="processed_images.zip",
+            mime="application/zip"
+        )
+
+        # Clean up temp folder after download preparation
+        shutil.rmtree(temp_dir)
